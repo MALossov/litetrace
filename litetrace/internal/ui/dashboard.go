@@ -88,7 +88,7 @@ func (d *Dashboard) runInternal(tracingAlreadyStarted bool) (string, error) {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft)
 	helpView.SetBorder(true).SetTitle(" Controls ")
-	helpView.SetText(` [green]w[white]: Wizard | [green]p[white]: Pause/Resume | [green]a[white]: AutoScroll | [green]c[white]: Clear | [green]s[white]: Save | [green]q[white]: Quit `)
+	helpView.SetText(` [green]w[white]: Wizard | [green]p[white]: Pause/Resume | [green]c[white]: Clear | [green]s[white]: Save | [green]q[white]: Quit `)
 
 	// --- 布局构建 ---
 	// 状态栏固定宽度 48，追踪视图弹性占据剩余空间
@@ -120,9 +120,9 @@ func (d *Dashboard) runInternal(tracingAlreadyStarted bool) (string, error) {
 		case 'p', 'P':
 			d.togglePause()
 			return nil
-		case 'a', 'A':
-			d.toggleAutoScroll()
-			return nil
+		// case 'a', 'A':
+		// 	d.toggleAutoScroll()
+		// 	return nil
 		case 'c', 'C':
 			d.clearBuffer()
 			return nil
@@ -357,15 +357,15 @@ func (d *Dashboard) togglePause() {
 	}
 }
 
-func (d *Dashboard) toggleAutoScroll() {
-	d.autoScroll = !d.autoScroll
-	if d.autoScroll {
-		d.logPrint("green", "AutoScroll ON")
-		d.traceView.ScrollToEnd()
-	} else {
-		d.logPrint("yellow", "AutoScroll OFF")
-	}
-}
+// func (d *Dashboard) toggleAutoScroll() {
+// 	d.autoScroll = !d.autoScroll
+// 	if d.autoScroll {
+// 		d.logPrint("green", "AutoScroll ON")
+// 		d.traceView.ScrollToEnd()
+// 	} else {
+// 		d.logPrint("yellow", "AutoScroll OFF")
+// 	}
+// }
 
 func (d *Dashboard) clearBuffer() {
 	d.mu.Lock()
