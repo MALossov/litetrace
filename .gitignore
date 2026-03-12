@@ -17,18 +17,15 @@
 # Go workspace file
 go.work
 
-# Build output
-litetrace
-litetrace_test
-lite-tracer-mygo
-litetrace_new
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+.trae/
+*/.trae/
+*/.vscode/
 
 # OS
 .DS_Store
@@ -37,7 +34,7 @@ Thumbs.db
 # Trace output files
 *.txt
 *.log
-*.cast
+# *.cast
 
 # Temporary files
 /tmp/
