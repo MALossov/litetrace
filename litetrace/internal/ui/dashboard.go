@@ -32,7 +32,9 @@ type Dashboard struct {
 
 	paused         bool
 	tracingStarted bool
-	autoScroll     bool // 自动滚动到底部开关
+	autoScroll     bool      // 自动滚动到底部开关
+	savedFile      string    // 最后保存的文件路径
+	shutdownOnce   sync.Once // 确保 Shutdown 只执行一次
 }
 
 func NewDashboard(engine *ftrace.Engine) *Dashboard {
@@ -49,7 +51,17 @@ func NewDashboard(engine *ftrace.Engine) *Dashboard {
 	}
 }
 
-func (d *Dashboard) Run() error {
+// Run 启动 TUI，返回保存的文件路径（如果有）
+func (d *Dashboard) Run() (string, error) {
+	return d.runInternal(false)
+}
+
+// RunWithTracingStarted 用于外部已启动 tracing 的情况（如 wizard），返回保存的文件路径（如果有）
+func (d *Dashboard) RunWithTracingStarted() (string, error) {
+	return d.runInternal(true)
+}
+
+func (d *Dashboard) runInternal(tracingAlreadyStarted bool) (string, error) {
 	d.app = tview.NewApplication()
 
 	// --- UI 组件初始化 ---
@@ -139,19 +151,28 @@ func (d *Dashboard) Run() error {
 		// 稍微延迟确保 Run() 已接管终端
 		time.Sleep(100 * time.Millisecond)
 
-		d.app.QueueUpdateDraw(func() {
-			fmt.Fprintln(d.traceView, "[yellow]>> Litetrace Ready. Press 'w' to configure tracing...[white]")
-		})
+		if tracingAlreadyStarted {
+			// 外部已启动 tracing，直接开始读取 trace_pipe
+			d.tracingStarted = true
+			d.logPrint("green", "Tracing already started, launching dashboard...")
+			go d.startTraceStreamLoop()
+		} else {
+			d.app.QueueUpdateDraw(func() {
+				fmt.Fprintln(d.traceView, "[yellow]>> Litetrace Ready. Press 'w' to configure tracing...[white]")
+			})
+		}
 
 		go d.updateStatusLoop()
 		go d.handleSignals()
-		// 注意：startTraceStreamLoop 在 tracing 启动后才启动，避免占用 trace_pipe
 	}()
 
-	if err := d.app.Run(); err != nil {
-		return fmt.Errorf("tview run error: %v", err)
+	runErr := d.app.Run()
+	// 无论正常退出还是出错，都调用 Shutdown 并返回 savedFile
+	d.Shutdown()
+	if runErr != nil {
+		return d.savedFile, fmt.Errorf("tview run error: %v", runErr)
 	}
-	return nil
+	return d.savedFile, nil
 }
 
 // showStartWizard 修复了输入字符被劫持的问题
@@ -314,9 +335,11 @@ func (d *Dashboard) handleSignals() {
 }
 
 func (d *Dashboard) Shutdown() {
-	d.cancel()
-	d.app.Stop()
-	d.engine.SafeShutdown()
+	d.shutdownOnce.Do(func() {
+		d.cancel()
+		d.app.Stop()
+		d.engine.SafeShutdown()
+	})
 }
 
 func (d *Dashboard) togglePause() {
@@ -369,6 +392,7 @@ func (d *Dashboard) saveTrace() {
 	if err != nil {
 		d.logPrint("red", fmt.Sprintf("Save Failed: %v", err))
 	} else {
+		d.savedFile = filename
 		d.logPrint("green", fmt.Sprintf("Saved to %s", filename))
 		// 计算文件大小和行数
 		fileSize, err := os.Stat(filename)
@@ -381,6 +405,5 @@ func (d *Dashboard) saveTrace() {
 			d.logPrint("red", fmt.Sprintf("failed to read output file for line count: %v", err))
 		}
 		d.logPrint("green", fmt.Sprintf("Trace file line count: %d", len(strings.Split(string(content), "\n"))))
-
 	}
 }

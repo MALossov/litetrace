@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/malossov/lite-tracer-mygo/internal/ftrace"
 	"github.com/malossov/lite-tracer-mygo/internal/ui"
+	"github.com/spf13/cobra"
 )
 
 var tuiCmd = &cobra.Command{
@@ -28,7 +28,14 @@ var tuiCmd = &cobra.Command{
 
 		dashboard := ui.NewDashboard(engine)
 
-		if err := dashboard.Run(); err != nil {
+		savedFile, err := dashboard.Run()
+
+		// 无论成功与否，先输出保存信息
+		if savedFile != "" {
+			fmt.Fprintf(os.Stderr, "\n[✓] Trace data saved to: %s\n", savedFile)
+		}
+
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
 			os.Exit(1)
 		}

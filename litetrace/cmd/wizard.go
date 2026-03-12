@@ -108,7 +108,15 @@ var wizardCmd = &cobra.Command{
 			fmt.Println("[*] Launching TUI Dashboard...")
 			time.Sleep(500 * time.Millisecond)
 			dashboard := ui.NewDashboard(engine)
-			if err := dashboard.Run(); err != nil {
+			// tracing 已在外部启动，使用 RunWithTracingStarted
+			savedFile, err := dashboard.RunWithTracingStarted()
+
+			// 无论成功与否，先输出保存信息
+			if savedFile != "" {
+				fmt.Fprintf(os.Stderr, "\n[✓] Trace data saved to: %s\n", savedFile)
+			}
+
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
 				os.Exit(1)
 			}

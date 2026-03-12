@@ -63,12 +63,12 @@ litetrace/
 │   │   ├── engine_test.go
 │   │   ├── discover.go   # tracefs 发现
 │   │   ├── discover_test.go
-│   │   └── pipe.go       # trace_pipe 读取
+│   │   └── pipe.go       # trace_pipe 实时数据流读取
 │   ├── search/           # 函数搜索
 │   │   ├── scanner.go    # 扫描实现
 │   │   └── scanner_test.go
 │   ├── ui/               # TUI 界面
-│   │   └── dashboard.go  # 仪表盘实现
+│   │   └── dashboard.go  # 仪表盘实现（含状态/追踪/日志面板）
 │   └── wizard/           # 交互式向导
 │       └── prompter.go   # 提示实现
 ├── docs/                 # 文档
@@ -142,6 +142,7 @@ litetrace/
   - `StopAndExport()`: 4步关闭流程
   - `SafeShutdown()`: 紧急安全关闭
   - `RunWithDuration()`: 定时追踪
+  - `ReadTracePipe()`: 读取 trace_pipe 实时数据流
 
 - `FindTracefs()`: 自动发现 tracefs 挂载点
 
@@ -189,11 +190,14 @@ litetrace/
 - `Dashboard`: TUI 仪表盘
   - 状态面板: 显示当前追踪状态
   - 追踪面板: 实时显示追踪数据
+  - 日志面板: 显示命令执行日志
   - 控制面板: 显示键盘快捷键
 
 交互:
 - `q/Ctrl+C`: 退出
+- `w`: 打开配置向导
 - `p`: 暂停/恢复
+- `a`: 切换自动滚动
 - `s`: 保存到文件
 - `c`: 清空缓冲区
 - `↑/↓`: 滚动
