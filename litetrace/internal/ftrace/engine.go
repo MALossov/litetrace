@@ -429,7 +429,7 @@ func (e *Engine) RunWithDuration(tracer, filter, outputPath string, duration tim
 // SafeShutdown 紧急安全关闭，用于信号处理
 // 执行 3 步清理：禁用追踪 -> 重置追踪器 -> 清空过滤器
 // 忽略错误，确保尽最大努力恢复安全状态
-func (e *Engine) SafeShutdown() {
+func (e *Engine) SafeShutdown(forced ...bool) {
 	e.debugLog("SAFE SHUTDOWN: Emergency shutdown initiated")
 
 	e.debugLog("SAFE SHUTDOWN: Disabling tracing (tracing_on = 0)")
@@ -454,6 +454,10 @@ func (e *Engine) SafeShutdown() {
 	}
 
 	// 检查 trace_pipe 是否存在，如果不存在则略过
+	if len(forced) > 0 && !forced[0] {
+		return
+	}
+
 	tracePipePath := filepath.Join(e.tracefsPath, "trace_pipe")
 	if _, err := os.Stat(tracePipePath); err == nil {
 		e.debugLog("SAFE SHUTDOWN: Checking for processes using %s", tracePipePath)
