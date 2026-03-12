@@ -43,7 +43,7 @@ Litetrace 是一个零依赖、单二进制文件的 Linux 内核追踪工具，
 
 ```bash
 # 克隆仓库
-git clone ssh://git@server.malossov.top:2233/MALoCourse/litetrace.git
+git clone ssh://git@<placeholder>/litetrace.git
 cd litetrace/litetrace
 
 # 编译

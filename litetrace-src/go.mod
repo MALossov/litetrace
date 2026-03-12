@@ -1,4 +1,4 @@
-module github.com/malossov/lite-tracer-mygo
+module github.com/M410550/lite-tracer-mygo
 
 go 1.25.0
 

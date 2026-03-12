@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/malossov/lite-tracer-mygo/internal/ftrace"
+	"github.com/M410550/lite-tracer-mygo/internal/ftrace"
 	"github.com/spf13/cobra"
 )
 

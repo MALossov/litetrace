@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/M410550/lite-tracer-mygo/internal/ftrace"
+	"github.com/M410550/lite-tracer-mygo/internal/search"
 	"github.com/spf13/cobra"
-	"github.com/malossov/lite-tracer-mygo/internal/ftrace"
-	"github.com/malossov/lite-tracer-mygo/internal/search"
 )
 
 var searchCmd = &cobra.Command{

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/M410550/lite-tracer-mygo/internal/ftrace"
 	"github.com/spf13/cobra"
-	"github.com/malossov/lite-tracer-mygo/internal/ftrace"
 )
 
 var statusCmd = &cobra.Command{
@@ -39,7 +39,12 @@ var statusCmd = &cobra.Command{
 		fmt.Println("=========================================")
 		fmt.Println("[ Ftrace Kernel Subsystem Status ]")
 		fmt.Println("=========================================")
-		fmt.Printf("- Engine Status : %s (tracing_on = %d)\n", engineStatus, func() int { if status.Enabled { return 1 }; return 0 }())
+		fmt.Printf("- Engine Status : %s (tracing_on = %d)\n", engineStatus, func() int {
+			if status.Enabled {
+				return 1
+			}
+			return 0
+		}())
 		fmt.Printf("- Current Tracer: %s\n", status.Tracer)
 		fmt.Printf("- Active Filters: %s\n", status.Filter)
 		fmt.Printf("- Buffer Size   : %d KB (Per CPU)\n", status.BufferSize)
