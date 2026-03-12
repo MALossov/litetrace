@@ -2,7 +2,7 @@
 - litetrace-src: 源代码目录
 - litetrace: 可执行文件，静态编译，无需依赖任何库
 - litetrace_demo.cast: 演示 cast 文件,使用`asciinema play ./litetrace_demo.cast`播放
-- litetrace_demo.png: 演示截图，展示 litetrace 的界面和功能
+- litetrace_demo.gif: 演示截图，展示 litetrace 的界面和功能
 
 ## 源码目录litetrace-src关键文档
 
