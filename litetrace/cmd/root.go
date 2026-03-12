@@ -36,6 +36,7 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(tuiCmd)
 	rootCmd.AddCommand(tldrCmd)
+	rootCmd.AddCommand(terminateCmd)
 }
 
 // checkRoot 检查是否以 root 身份运行

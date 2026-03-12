@@ -171,11 +171,14 @@ litetrace/
 主要函数:
 - `FastScan()`: 快速扫描 available_filter_functions，支持正则匹配
 - `ValidateFunction()`: 验证函数名是否有效
+- `ValidateAndNormalizeFilter()`: 验证并标准化 filter，支持无效 filter 自动忽略
+- `NormalizeFilter()`: 标准化 filter，处理通配符和无效函数
 
 特性:
 - 使用 bufio.Scanner 流式读取，防止 OOM
 - 2秒超时保护
 - 最大返回 100 个结果
+- 无效 filter 自动降级处理
 
 3.4 internal/ui 包
 ------------------

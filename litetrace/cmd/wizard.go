@@ -3,13 +3,15 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/malossov/lite-tracer-mygo/internal/ftrace"
-	"github.com/malossov/lite-tracer-mygo/internal/wizard"
 	"github.com/malossov/lite-tracer-mygo/internal/search"
 	"github.com/malossov/lite-tracer-mygo/internal/ui"
+	"github.com/malossov/lite-tracer-mygo/internal/wizard"
+	"github.com/spf13/cobra"
 )
 
 var wizardCmd = &cobra.Command{
@@ -47,21 +49,43 @@ var wizardCmd = &cobra.Command{
 
 		// Step 3: Validate filter
 		if filter != "" {
-			valid, err := search.ValidateFunction(tracefsPath, filter)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
+			result := search.ValidateAndNormalizeFilter(tracefsPath, filter, string(tracer))
+			if result.ShouldIgnore {
+				wizard.PrintWarning(result.Message)
+				filter = ""
+			} else if !result.Valid {
+				wizard.PrintError(result.Message)
 				os.Exit(1)
+			} else {
+				wizard.PrintSuccess(result.Message)
 			}
-			if !valid {
-				wizard.PrintError(fmt.Sprintf("Function '%s' not found in kernel symbols. Please try again.", filter))
-				os.Exit(1)
-			}
-			wizard.PrintSuccess(fmt.Sprintf("Function '%s' validated successfully", filter))
 		} else {
 			wizard.PrintWarning("No filter specified. System may experience high load.")
 		}
 
-		// Step 4: Confirm configuration
+		// Step 4: Choose view mode BEFORE starting tracing
+		viewMode, err := wizard.AskViewMode()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Step 5: Ask for duration based on view mode
+		var duration string
+		if viewMode == 2 || viewMode == 3 {
+			duration, err = wizard.AskDuration()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
+				os.Exit(1)
+			}
+			if duration != "" {
+				wizard.PrintSuccess(fmt.Sprintf("Tracing duration set to: %s", duration))
+			} else {
+				wizard.PrintWarning("Tracing will run until manually stopped")
+			}
+		}
+
+		// Step 6: Confirm configuration
 		confirmMsg := fmt.Sprintf("Start tracing with [%s] tracer and filter [%s]? (Y/n)", tracer, filter)
 		confirmed, err := wizard.AskConfirm(confirmMsg)
 		if err != nil || !confirmed {
@@ -69,14 +93,7 @@ var wizardCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
-		// Step 5: Choose view mode BEFORE starting tracing
-		viewMode, err := wizard.AskViewMode()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
-			os.Exit(1)
-		}
-
-		// Step 6: Start tracing
+		// Step 7: Start tracing
 		if err := engine.StartTracing(string(tracer), filter); err != nil {
 			fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
 			os.Exit(1)
@@ -84,7 +101,7 @@ var wizardCmd = &cobra.Command{
 
 		wizard.PrintSuccess("Tracing started!")
 
-		// Step 7: Execute based on view mode
+		// Step 8: Execute based on view mode
 		switch viewMode {
 		case 1:
 			// TUI Dashboard mode
@@ -98,12 +115,21 @@ var wizardCmd = &cobra.Command{
 
 		case 2:
 			// Silent mode with export
-			fmt.Println("[*] Running silently for 10 seconds...")
-			time.Sleep(10 * time.Second)
-			
+			if duration != "" {
+				d, _ := time.ParseDuration(duration)
+				fmt.Printf("[*] Running silently for %v...\n", d)
+				time.Sleep(d)
+			} else {
+				fmt.Println("[*] Running silently. Press Ctrl+C to stop...")
+				// Wait for interrupt
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+				<-sigChan
+			}
+
 			timestamp := time.Now().Format("20060102_150405")
 			outputPath := fmt.Sprintf("/tmp/litetrace_wizard_%s.txt", timestamp)
-			
+
 			fmt.Printf("[*] Exporting trace to %s...\n", outputPath)
 			if err := engine.StopAndExport(outputPath); err != nil {
 				fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
@@ -112,15 +138,51 @@ var wizardCmd = &cobra.Command{
 			wizard.PrintSuccess(fmt.Sprintf("Trace saved to %s", outputPath))
 
 		case 3:
-			// Background mode - just print instructions
+			// Background mode
 			fmt.Println("[*] Tracing is running in background.")
-			fmt.Println("[*] To stop tracing and view results:")
-			fmt.Println("    1. Run 'litetrace status' to check status")
-			fmt.Println("    2. Run 'litetrace run --output /path/to/file' to export results")
-			fmt.Println("\n[!] Press Ctrl+C to stop and cleanup immediately")
-			
-			// Wait for interrupt
-			select {}
+
+			if duration != "" {
+				d, _ := time.ParseDuration(duration)
+				fmt.Printf("[*] Will run for %v...\n", d)
+				fmt.Println("[*] Press Ctrl+C to stop early")
+
+				// Setup signal handling
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+				// Wait for either duration or signal
+				select {
+				case <-sigChan:
+					fmt.Println("\n[*] Stopping early...")
+				case <-time.After(d):
+					fmt.Println("\n[*] Duration completed.")
+				}
+
+				// Export results
+				timestamp := time.Now().Format("20060102_150405")
+				outputPath := fmt.Sprintf("/tmp/litetrace_wizard_%s.txt", timestamp)
+
+				fmt.Printf("[*] Exporting trace to %s...\n", outputPath)
+				if err := engine.StopAndExport(outputPath); err != nil {
+					fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
+					os.Exit(1)
+				}
+				wizard.PrintSuccess(fmt.Sprintf("Trace saved to %s", outputPath))
+			} else {
+				fmt.Println("[*] To stop tracing and view results:")
+				fmt.Println("    1. Run 'litetrace status' to check status")
+				fmt.Println("    2. Run 'litetrace run --output /path/to/file' to export results")
+				fmt.Println("\n[!] Press Ctrl+C to stop and cleanup immediately")
+
+				// Wait for interrupt with cleanup
+				sigChan := make(chan os.Signal, 1)
+				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+				<-sigChan
+
+				fmt.Println("\n[*] Cleaning up...")
+				engine.SafeShutdown()
+				wizard.PrintSuccess("Tracing stopped and cleaned up")
+			}
 		}
 	},
 }

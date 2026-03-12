@@ -5,15 +5,17 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/malossov/lite-tracer-mygo/internal/ftrace"
+	"github.com/malossov/lite-tracer-mygo/internal/search"
+	"github.com/malossov/lite-tracer-mygo/internal/wizard"
+	"github.com/spf13/cobra"
 )
 
 var (
-	tracerFlag     string
-	filterFlag     string
-	durationFlag   string
-	outputFlag     string
+	tracerFlag   string
+	filterFlag   string
+	durationFlag string
+	outputFlag   string
 )
 
 var runCmd = &cobra.Command{
@@ -54,10 +56,15 @@ var runCmd = &cobra.Command{
 			fmt.Println("    Use 'function' or 'function_graph' tracer to capture data.")
 		}
 
-		if filterFlag == "" {
-			if tracerFlag != "nop" {
-				fmt.Println("[!] Warning: No filter specified. Capturing all functions (high overhead)!")
-			}
+		result := search.ValidateAndNormalizeFilter(tracefsPath, filterFlag, tracerFlag)
+		if result.ShouldIgnore {
+			fmt.Printf("[!] %s\n", result.Message)
+			filterFlag = ""
+		} else if !result.Valid {
+			fmt.Printf("[!] %s\n", result.Message)
+			wizard.PrintWarning("No filter specified. System may experience high load.")
+		} else if filterFlag != "" {
+			fmt.Printf("[+] %s\n", result.Message)
 		}
 
 		if err := engine.RunWithDuration(tracerFlag, filterFlag, outputFlag, duration); err != nil {

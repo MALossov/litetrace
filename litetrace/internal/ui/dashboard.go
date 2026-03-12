@@ -6,113 +6,224 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 	"github.com/malossov/lite-tracer-mygo/internal/ftrace"
+	"github.com/rivo/tview"
 )
 
 type Dashboard struct {
-	app         *tview.Application
-	engine      *ftrace.Engine
-	statusView  *tview.TextView
-	traceView   *tview.TextView
-	ctx         context.Context
-	cancel      context.CancelFunc
-	traceBuffer []string
-	bufferSize  int
-	paused      bool
+	app        *tview.Application
+	engine     *ftrace.Engine
+	statusView *tview.TextView
+	traceView  *tview.TextView
+	logView    *tview.TextView // 指令输出日志区域
+	mainFlex   *tview.Flex
+	ctx        context.Context
+	cancel     context.CancelFunc
+
+	// 并发安全缓冲
+	mu           sync.Mutex
+	traceBuffer  []string // 用于保存和历史查看的全量缓冲区
+	renderBuffer []string // 用于平滑 UI 渲染的零时缓冲区
+
+	paused         bool
+	tracingStarted bool
+	autoScroll     bool // 自动滚动到底部开关
 }
 
 func NewDashboard(engine *ftrace.Engine) *Dashboard {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Dashboard{
-		engine:      engine,
-		ctx:         ctx,
-		cancel:      cancel,
-		traceBuffer: make([]string, 0, 1000),
-		bufferSize:  0,
+		engine:         engine,
+		ctx:            ctx,
+		cancel:         cancel,
+		traceBuffer:    make([]string, 0, 2000),
+		renderBuffer:   make([]string, 0, 100),
+		tracingStarted: false,
+		paused:         false,
+		autoScroll:     true, // 默认开启自动滚动
 	}
 }
 
 func (d *Dashboard) Run() error {
 	d.app = tview.NewApplication()
 
-	// Status panel (top-left)
-	d.statusView = tview.NewTextView()
-	d.statusView.SetDynamicColors(true).SetScrollable(true).SetBorder(true).SetTitle(" Status ")
+	// --- UI 组件初始化 ---
+	d.statusView = tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft).
+		SetWrap(false)
+	d.statusView.SetBorder(true).SetTitle(" System Status (Kernel) ")
 
-	// Live trace panel (top-right)
-	d.traceView = tview.NewTextView()
-	d.traceView.SetDynamicColors(true).SetScrollable(true).SetBorder(true).SetTitle(" Live Trace ")
+	d.traceView = tview.NewTextView().
+		SetDynamicColors(true).
+		SetScrollable(true).
+		SetRegions(true)
+	d.traceView.SetBorder(true).SetTitle(" Live Trace Output ")
 
-	// Help/Controls panel (bottom)
-	helpView := tview.NewTextView()
-	helpView.SetDynamicColors(true).SetBorder(true).SetTitle(" Controls ")
-	helpView.SetText(`[yellow]Keyboard Controls:[white]
-  [green]Ctrl+C[white] or [green]q[white] - Quit and cleanup
-  [green]p[white]            - Pause/Resume tracing
-  [green]s[white]            - Save current trace to file
-  [green]c[white]            - Clear trace buffer
-  [green]↑/↓[white]          - Scroll trace view`)
+	// 指令输出日志区域
+	d.logView = tview.NewTextView().
+		SetDynamicColors(true).
+		SetScrollable(true).
+		SetWrap(true)
+	d.logView.SetBorder(true).SetTitle(" Command Output ")
 
-	// Create top flex (status + trace)
+	helpView := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft)
+	helpView.SetBorder(true).SetTitle(" Controls ")
+	helpView.SetText(` [green]w[white]: Wizard | [green]p[white]: Pause/Resume | [green]a[white]: AutoScroll | [green]c[white]: Clear | [green]s[white]: Save | [green]q[white]: Quit `)
+
+	// --- 布局构建 ---
+	// 状态栏固定宽度 48，追踪视图弹性占据剩余空间
 	topFlex := tview.NewFlex().
-		AddItem(d.statusView, 0, 1, false).
-		AddItem(d.traceView, 0, 2, false)
+		AddItem(d.statusView, 48, 1, false).
+		AddItem(d.traceView, 0, 1, true)
 
-	// Create main flex with help at bottom
-	mainFlex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(topFlex, 0, 4, false).
-		AddItem(helpView, 6, 0, false)
+	// 底部区域：日志视图 + 帮助视图
+	bottomFlex := tview.NewFlex().
+		AddItem(d.logView, 0, 2, false).
+		AddItem(helpView, 48, 1, false)
 
-	d.app.SetRoot(mainFlex, true)
+	d.mainFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(topFlex, 0, 3, true).
+		AddItem(bottomFlex, 6, 0, false)
 
-	// Keyboard handler
-	d.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'q', 'Q':
-				d.Shutdown()
-				return nil
-			case 'p', 'P':
-				d.togglePause()
-				return nil
-			case 'c', 'C':
-				d.clearBuffer()
-				return nil
-			case 's', 'S':
-				d.saveTrace()
-				return nil
-			}
-		case tcell.KeyCtrlC:
+	// --- 关键修复：输入劫持处理 ---
+
+	// 1. 主界面业务快捷键：绑定在 mainFlex 上
+	// 这样当 Root 切换到 Wizard 弹窗时，这些监听会自动“离线”，不再拦截输入框字符
+	d.mainFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'q', 'Q':
 			d.Shutdown()
+			return nil
+		case 'w', 'W':
+			d.showStartWizard()
+			return nil
+		case 'p', 'P':
+			d.togglePause()
+			return nil
+		case 'a', 'A':
+			d.toggleAutoScroll()
+			return nil
+		case 'c', 'C':
+			d.clearBuffer()
+			return nil
+		case 's', 'S':
+			d.saveTrace()
 			return nil
 		}
 		return event
 	})
 
-	go d.updateStatus()
-	go d.startTraceStream()
+	// 2. 全局系统快捷键：仅处理强退等强制操作
+	d.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyCtrlC {
+			d.Shutdown()
+			return nil
+		}
+		// 其他按键（如下层输入框的 s、w 等）原样传递
+		return event
+	})
 
+	// 设置根节点并聚焦
+	d.app.SetRoot(d.mainFlex, true).SetFocus(d.traceView)
+
+	// --- 启动后台处理协程 ---
 	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		<-sigChan
-		d.Shutdown()
+		// 稍微延迟确保 Run() 已接管终端
+		time.Sleep(100 * time.Millisecond)
+
+		d.app.QueueUpdateDraw(func() {
+			fmt.Fprintln(d.traceView, "[yellow]>> Litetrace Ready. Press 'w' to configure tracing...[white]")
+		})
+
+		go d.updateStatusLoop()
+		go d.handleSignals()
+		// 注意：startTraceStreamLoop 在 tracing 启动后才启动，避免占用 trace_pipe
 	}()
 
 	if err := d.app.Run(); err != nil {
-		return err
+		return fmt.Errorf("tview run error: %v", err)
 	}
 	return nil
 }
 
-func (d *Dashboard) updateStatus() {
-	ticker := NewTicker(2)
+// showStartWizard 修复了输入字符被劫持的问题
+func (d *Dashboard) showStartWizard() {
+	form := tview.NewForm()
+	form.SetBorder(true).SetTitle(" Configuration Wizard ")
+
+	tracerOptions := []string{"function", "function_graph", "nop"}
+	selectedTracer := "function"
+	form.AddDropDown("Current Tracer", tracerOptions, 0, func(option string, _ int) {
+		selectedTracer = option
+	})
+
+	filterText := ""
+	form.AddInputField("Function Filter", "", 30, nil, func(text string) {
+		filterText = text
+	})
+
+	form.AddButton("Apply & Start", func() {
+		// 先恢复主布局，避免弹窗阻塞
+		d.app.SetRoot(d.mainFlex, true).SetFocus(d.traceView)
+		d.traceView.Clear()
+		d.logPrint("yellow", fmt.Sprintf("Starting tracing with [%s]...", selectedTracer))
+
+		// 异步启动 tracing，避免阻塞 TUI
+		go func() {
+			if err := d.engine.StartTracing(selectedTracer, filterText); err != nil {
+				d.showErrorInTraceView(err)
+				return
+			}
+			d.app.QueueUpdateDraw(func() {
+				d.tracingStarted = true
+				d.paused = false
+				d.logPrint("green", fmt.Sprintf("Tracing started with [%s]", selectedTracer))
+			})
+			// tracing 启动成功后再启动 trace_pipe 读取
+			go d.startTraceStreamLoop()
+		}()
+	})
+
+	form.AddButton("Cancel", func() {
+		d.app.SetRoot(d.mainFlex, true).SetFocus(d.traceView)
+	})
+
+	// 居中弹窗逻辑
+	modal := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(form, 12, 1, true).
+			AddItem(nil, 0, 1, false), 60, 1, true).
+		AddItem(nil, 0, 1, false)
+
+	d.app.SetRoot(modal, true).SetFocus(form)
+}
+
+func (d *Dashboard) showErrorInTraceView(err error) {
+	d.app.QueueUpdateDraw(func() {
+		fmt.Fprintf(d.logView, "[red]!! Error: %v[white]\n", err)
+		d.logView.ScrollToEnd()
+	})
+}
+
+// logPrint 在日志区域打印消息（带时间戳）
+func (d *Dashboard) logPrint(color, msg string) {
+	timestamp := time.Now().Format("15:04:05")
+	fmt.Fprintf(d.logView, "[grey]%s[%s] %s[white]\n", timestamp, color, msg)
+	d.logView.ScrollToEnd()
+}
+
+func (d *Dashboard) updateStatusLoop() {
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -125,24 +236,18 @@ func (d *Dashboard) updateStatus() {
 				continue
 			}
 
-			statusText := fmt.Sprintf(`[yellow]Ftrace Kernel Subsystem Status[white]
-=========================================
-- Engine Status : %s
-- Current Tracer: %s
-- Active Filters: %s
-- Buffer Size   : %d KB (Per CPU)
-- Trace Clock   : %s
-=========================================`,
-				func() string {
-					if status.Enabled {
-						return "[green]RUNNING[white] (tracing_on = 1)"
-					}
-					return "[red]STOPPED[white] (tracing_on = 0)"
-				}(),
-				status.Tracer,
-				status.Filter,
-				status.BufferSize,
-				status.TraceClock,
+			onColor := "[red]OFF"
+			if status.Enabled {
+				onColor = "[green]ON"
+			}
+
+			statusText := fmt.Sprintf(
+				"[yellow]STATUS:[white]    %s\n"+
+					"[yellow]TRACER:[white]    %s\n"+
+					"[yellow]BUFFER:[white]    %d KB\n"+
+					"[yellow]CLOCK:[white]     %s\n"+
+					"[yellow]FILTER:[white]    %s",
+				onColor, status.Tracer, status.BufferSize, status.TraceClock, status.Filter,
 			)
 
 			d.app.QueueUpdateDraw(func() {
@@ -152,9 +257,14 @@ func (d *Dashboard) updateStatus() {
 	}
 }
 
-func (d *Dashboard) startTraceStream() {
+func (d *Dashboard) startTraceStreamLoop() {
 	pipeChan := d.engine.ReadTracePipe(d.ctx)
-	maxBufferSize := 5000
+
+	// 渲染刷屏保护：100ms 批次处理
+	renderTicker := time.NewTicker(100 * time.Millisecond)
+	defer renderTicker.Stop()
+
+	maxHistory := 5000 // 最大历史行数
 
 	for {
 		select {
@@ -164,104 +274,113 @@ func (d *Dashboard) startTraceStream() {
 			if !ok {
 				return
 			}
+			d.mu.Lock()
+			d.traceBuffer = append(d.traceBuffer, line)
+			d.renderBuffer = append(d.renderBuffer, line)
+
+			// 内存管理：防止无限增长
+			if len(d.traceBuffer) > maxHistory {
+				d.traceBuffer = d.traceBuffer[len(d.traceBuffer)-maxHistory:]
+			}
+			d.mu.Unlock()
+
+		case <-renderTicker.C:
+			d.mu.Lock()
+			if len(d.renderBuffer) == 0 {
+				d.mu.Unlock()
+				continue
+			}
+
+			batch := strings.Join(d.renderBuffer, "")
+			d.renderBuffer = d.renderBuffer[:0]
+			d.mu.Unlock()
+
+			// 更新 UI - 根据 autoScroll 设置决定是否自动滚动到底部
 			d.app.QueueUpdateDraw(func() {
-				d.traceBuffer = append(d.traceBuffer, line)
-				d.bufferSize += len(line)
-				
-				if len(d.traceBuffer) > maxBufferSize {
-					overflow := len(d.traceBuffer) - maxBufferSize
-					d.traceBuffer = d.traceBuffer[overflow:]
-					d.bufferSize = 0
-					for _, s := range d.traceBuffer {
-						d.bufferSize += len(s)
-					}
-					d.traceView.Clear()
+				fmt.Fprint(d.traceView, batch)
+				if d.autoScroll {
+					d.traceView.ScrollToEnd()
 				}
-				
-				fmt.Fprint(d.traceView, line)
 			})
 		}
 	}
 }
 
+func (d *Dashboard) handleSignals() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+	d.Shutdown()
+}
+
 func (d *Dashboard) Shutdown() {
 	d.cancel()
-	d.engine.SafeShutdown()
 	d.app.Stop()
-	os.Exit(0)
+	d.engine.SafeShutdown()
 }
 
 func (d *Dashboard) togglePause() {
+	if !d.tracingStarted {
+		d.logPrint("yellow", "Tracing not started yet")
+		return
+	}
 	d.paused = !d.paused
 	if d.paused {
 		d.engine.Disable()
-		d.app.QueueUpdateDraw(func() {
-			fmt.Fprint(d.traceView, "\n[yellow]*** TRACING PAUSED ***[white]\n\n")
-		})
+		d.logPrint("yellow", "Tracing PAUSED")
 	} else {
 		d.engine.Enable()
-		d.app.QueueUpdateDraw(func() {
-			fmt.Fprint(d.traceView, "\n[green]*** TRACING RESUMED ***[white]\n\n")
-		})
+		d.logPrint("green", "Tracing RESUMED")
+	}
+}
+
+func (d *Dashboard) toggleAutoScroll() {
+	d.autoScroll = !d.autoScroll
+	if d.autoScroll {
+		d.logPrint("green", "AutoScroll ON")
+		d.traceView.ScrollToEnd()
+	} else {
+		d.logPrint("yellow", "AutoScroll OFF")
 	}
 }
 
 func (d *Dashboard) clearBuffer() {
+	d.mu.Lock()
 	d.traceBuffer = d.traceBuffer[:0]
-	d.bufferSize = 0
-	d.app.QueueUpdateDraw(func() {
-		d.traceView.Clear()
-		fmt.Fprintln(d.traceView, "[yellow]*** BUFFER CLEARED ***[white]")
-	})
+	d.renderBuffer = d.renderBuffer[:0]
+	d.mu.Unlock()
+	d.traceView.Clear()
+	d.logPrint("grey", "Buffer Cleared")
 }
 
 func (d *Dashboard) saveTrace() {
-	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("/tmp/litetrace_%s.txt", timestamp)
-	
-	content := strings.Join(d.traceBuffer, "")
-	err := os.WriteFile(filename, []byte(content), 0644)
-	
-	d.app.QueueUpdateDraw(func() {
-		if err != nil {
-			fmt.Fprintf(d.traceView, "\n[red]*** Failed to save: %v ***[white]\n", err)
-		} else {
-			fmt.Fprintf(d.traceView, "\n[green]*** Trace saved to %s ***[white]\n", filename)
-		}
-	})
-}
-
-type Ticker struct {
-	C     chan struct{}
-	stop  chan struct{}
-	timer *time.Timer
-}
-
-func NewTicker(intervalSec int) *Ticker {
-	t := &Ticker{
-		C:    make(chan struct{}),
-		stop: make(chan struct{}),
+	d.mu.Lock()
+	if len(d.traceBuffer) == 0 {
+		d.mu.Unlock()
+		d.logPrint("yellow", "No trace data to save")
+		return
 	}
-	d := time.Duration(intervalSec) * time.Second
-	t.timer = time.NewTimer(d)
-	go func() {
-		for {
-			select {
-			case <-t.timer.C:
-				select {
-				case t.C <- struct{}{}:
-				default:
-				}
-				t.timer.Reset(d)
-			case <-t.stop:
-				return
-			}
-		}
-	}()
-	return t
-}
+	content := strings.Join(d.traceBuffer, "")
+	d.mu.Unlock()
 
-func (t *Ticker) Stop() {
-	close(t.stop)
-	t.timer.Stop()
+	filename := fmt.Sprintf("/tmp/litetrace_tui_dump_%s.txt", time.Now().Format("150405"))
+	err := os.WriteFile(filename, []byte(content), 0644)
+
+	if err != nil {
+		d.logPrint("red", fmt.Sprintf("Save Failed: %v", err))
+	} else {
+		d.logPrint("green", fmt.Sprintf("Saved to %s", filename))
+		// 计算文件大小和行数
+		fileSize, err := os.Stat(filename)
+		if err != nil {
+			d.logPrint("red", fmt.Sprintf("failed to get file size: %v", err))
+		}
+		d.logPrint("green", fmt.Sprintf("Trace file size: %d bytes", fileSize.Size()))
+		content, err := os.ReadFile(filename)
+		if err != nil {
+			d.logPrint("red", fmt.Sprintf("failed to read output file for line count: %v", err))
+		}
+		d.logPrint("green", fmt.Sprintf("Trace file line count: %d", len(strings.Split(string(content), "\n"))))
+
+	}
 }

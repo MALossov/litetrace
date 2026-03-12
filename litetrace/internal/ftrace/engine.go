@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -259,6 +260,17 @@ func (e *Engine) StopAndExport(outputPath string) error {
 		return fmt.Errorf("failed to write trace to file: %w", err)
 	}
 	e.debugLog("STOPPING: Trace exported to %s successfully", outputPath)
+	// 计算文件大小和行数
+	fileSize, err := os.Stat(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to get file size: %w", err)
+	}
+	fmt.Printf("[+] Trace file size: %d bytes\n", fileSize.Size())
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to read output file for line count: %w", err)
+	}
+	fmt.Printf("[+] Trace file line count: %d\n", len(strings.Split(string(content), "\n")))
 
 	// Step 3: Reset tracer to nop (必须在读取 trace 之后！)
 	e.debugLog("STOPPING: Step 3/4 - Resetting tracer to nop")
@@ -398,6 +410,19 @@ func (e *Engine) RunWithDuration(tracer, filter, outputPath string, duration tim
 	}
 
 	fmt.Printf("[+] Trace saved to %s\n", outputPath)
+
+	// 计算文件大小和行数
+	fileSize, err := os.Stat(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to get file size: %w", err)
+	}
+	fmt.Printf("[+] Trace file size: %d bytes\n", fileSize.Size())
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to read output file for line count: %w", err)
+	}
+	fmt.Printf("[+] Trace file line count: %d\n", len(strings.Split(string(content), "\n")))
+
 	return nil
 }
 
@@ -426,6 +451,26 @@ func (e *Engine) SafeShutdown() {
 		e.debugLog("SAFE SHUTDOWN FAILED: Could not clear filter: %v", err)
 	} else {
 		e.debugLog("SAFE SHUTDOWN: Filter cleared")
+	}
+
+	// 检查 trace_pipe 是否存在，如果不存在则略过
+	tracePipePath := filepath.Join(e.tracefsPath, "trace_pipe")
+	if _, err := os.Stat(tracePipePath); err == nil {
+		e.debugLog("SAFE SHUTDOWN: Checking for processes using %s", tracePipePath)
+		cmd := exec.Command("lsof", tracePipePath)
+		output, err := cmd.Output()
+		if err == nil && len(output) > 0 {
+			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+			for _, line := range lines[1:] {
+				fields := strings.Fields(line)
+				if len(fields) > 1 {
+					pid := fields[1]
+					e.debugLog("SAFE SHUTDOWN: Killing process %s using trace_pipe", pid)
+					killCmd := exec.Command("kill", "-9", pid)
+					_ = killCmd.Run()
+				}
+			}
+		}
 	}
 
 	e.debugLog("SAFE SHUTDOWN: Emergency shutdown completed")

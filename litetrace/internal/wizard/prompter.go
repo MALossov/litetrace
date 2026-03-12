@@ -1,10 +1,10 @@
 package wizard
 
 import (
-	"fmt"
 	"os"
 	"runtime"
 
+	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
 )
 
@@ -23,6 +23,12 @@ func AskTracer() (TracerType, error) {
 			"function        - Trace kernel function entries (lightweight)",
 			"function_graph  - Trace function calls and returns (detailed)",
 			"nop             - Disable tracing (safe mode)",
+		},
+		Templates: &promptui.SelectTemplates{
+			Label:    "{{ . }}?",
+			Active:   "\U0001F336 {{ . | red }}",
+			Inactive: "  {{ . | cyan }}",
+			Selected: "\U0001F336 {{ . | red | cyan }}",
 		},
 	}
 
@@ -43,7 +49,7 @@ func AskTracer() (TracerType, error) {
 
 func AskFilter() (string, error) {
 	prompt := promptui.Prompt{
-		Label:   "Enter a kernel function to filter (e.g., vfs_read)",
+		Label:   "Enter a kernel function to filter",
 		Default: "",
 	}
 
@@ -56,8 +62,8 @@ func AskFilter() (string, error) {
 
 func AskConfirm(message string) (bool, error) {
 	prompt := promptui.Prompt{
-		Label:   message,
-		Default: "Y",
+		Label:     message,
+		Default:   "Y",
 		IsConfirm: true,
 	}
 
@@ -69,7 +75,7 @@ func AskConfirm(message string) (bool, error) {
 		return false, err
 	}
 
-	return result == "y" || result == "Y", nil
+	return result == "y" || result == "Y" || result == "", nil
 }
 
 func AskViewMode() (int, error) {
@@ -77,8 +83,14 @@ func AskViewMode() (int, error) {
 		Label: "How do you want to view the kernel data?",
 		Items: []string{
 			"[1] Enter TUI Dashboard      - Open real-time monitoring screen",
-			"[2] Run silently and Export  - Run 10s and save to file",
+			"[2] Run silently and Export  - Run for specified duration and save to file",
 			"[3] Run in Background        - Detach and continue in background",
+		},
+		Templates: &promptui.SelectTemplates{
+			Label:    "{{ . }}?",
+			Active:   "\U0001F336 {{ . | red }}",
+			Inactive: "  {{ . | cyan }}",
+			Selected: "\U0001F336 {{ . | red | cyan }}",
 		},
 	}
 
@@ -90,33 +102,78 @@ func AskViewMode() (int, error) {
 	switch result {
 	case "[1] Enter TUI Dashboard      - Open real-time monitoring screen":
 		return 1, nil
-	case "[2] Run silently and Export  - Run 10s and save to file":
+	case "[2] Run silently and Export  - Run for specified duration and save to file":
 		return 2, nil
 	default:
 		return 3, nil
 	}
 }
 
+func AskDuration() (string, error) {
+	prompt := promptui.Select{
+		Label: "Select tracing duration",
+		Items: []string{
+			"10 seconds",
+			"30 seconds",
+			"1 minute",
+			"5 minutes",
+			"10 minutes",
+			"Until I stop it",
+		},
+		Templates: &promptui.SelectTemplates{
+			Label:    "{{ . }}?",
+			Active:   "\U0001F336 {{ . | red }}",
+			Inactive: "  {{ . | cyan }}",
+			Selected: "\U0001F336 {{ . | red | cyan }}",
+		},
+	}
+
+	_, result, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+
+	switch result {
+	case "10 seconds":
+		return "10s", nil
+	case "30 seconds":
+		return "30s", nil
+	case "1 minute":
+		return "1m", nil
+	case "5 minutes":
+		return "5m", nil
+	case "10 minutes":
+		return "10m", nil
+	default:
+		return "", nil
+	}
+}
+
 func PrintWelcome() {
 	_ = runtime.GOOS
-	fmt.Println(`
-  _                   _       ____             _       
- | |    ___  __ _  __| | ___ |  _ \ ___  _ __ | |_ ___ 
- | |   / _ \/ _` + "`" + ` |/ _` + "`" + ` |/ _ \| |_) / _ \| '_ \| __/ __|
- | |__|  __/ (_| | (_| |  __/|  __/ (_) | | | | |_\__ \
- |_____\___|\__,_|\__,_|\___||_|   \___/|_| |_|\__|___/
-                                                       
+	c := color.New(color.FgCyan, color.Bold)
+	c.Println(`
+//  _    _ _____ __________ ____ ____ ____ _____    _    ___  __________ _ 
+// / \  / /__ __/  __/__ __/  __/  _ /   _/  __/   / \__/\  \//  __/  _ / \
+// | |  | | / \ |  \   / \ |  \/| / \|  / |  \_____| |\/||\  /| |  | / \| |
+// | |_/| | | | |  /_  | | |    | |-||  \_|  /\____| |  ||/ / | |_/| \_/\_/
+// \____\_/ \_/ \____\ \_/ \_/\_\_/ \\____\____\   \_/  \/_/  \____\____(_)
+//   
+
 Kernel: Linux | Tracefs: /sys/kernel/tracing`)
 }
 
 func PrintSuccess(message string) {
-	fmt.Printf("[+] %s\n", message)
+	c := color.New(color.FgGreen, color.Bold)
+	c.Printf("[+] %s\n", message)
 }
 
 func PrintError(message string) {
-	fmt.Fprintf(os.Stderr, "[-] Error: %s\n", message)
+	c := color.New(color.FgRed, color.Bold)
+	c.Fprintf(os.Stderr, "[-] Error: %s\n", message)
 }
 
 func PrintWarning(message string) {
-	fmt.Printf("[!] Warning: %s\n", message)
+	c := color.New(color.FgYellow, color.Bold)
+	c.Printf("[!] Warning: %s\n", message)
 }
