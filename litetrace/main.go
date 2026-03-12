@@ -18,9 +18,6 @@ import (
 
 // Global variables for graceful shutdown handling
 var (
-	// ctx is the root context for the application, used for cancellation
-	ctx context.Context
-	// cancel is the cancel function for the root context
 	cancel context.CancelFunc
 	// engine is the global ftrace engine instance, used for emergency shutdown
 	engine *ftrace.Engine
