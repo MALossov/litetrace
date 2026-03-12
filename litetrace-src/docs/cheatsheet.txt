@@ -1,0 +1,255 @@
+================================================================================
+                         LITETRACE 使用手册
+================================================================================
+
+文件用途
+--------
+本文档是 Litetrace 工具的完整使用指南。Litetrace 是一个使用纯 Go 语言实现的 Linux 
+ftrace 内核追踪工具，无需依赖外部二进制文件，可直接与 tracefs 交互，提供内核函数
+追踪、实时监控、交互式向导等功能。
+
+主要功能
+--------
+1. 内核函数追踪
+   - 支持 function 和 function_graph 两种追踪器
+   - 可设置函数过滤器，精确追踪指定内核函数
+   - 支持持续时间追踪，自动导出结果
+
+2. 实时 TUI 监控
+   - 终端图形界面实时显示追踪数据
+   - 支持暂停/恢复、保存、清空等交互操作
+   - 实时显示追踪状态信息
+
+3. 交互式向导
+   - 引导式操作，适合新手使用
+   - 自动验证函数名有效性
+   - 支持多种查看模式（TUI/静默/后台）
+
+4. 函数搜索
+   - 支持正则表达式搜索内核函数
+   - 快速查找可追踪的函数
+
+5. 状态查询
+   - 显示当前 ftrace 子系统状态
+   - 包括追踪器类型、过滤器、缓冲区大小等
+
+使用方法
+--------
+
+【基本命令格式】
+  sudo litetrace [全局选项] <子命令> [子命令选项]
+
+【全局选项】
+  --debug    启用调试模式，显示 tracefs 文件操作详情
+
+【子命令】
+
+1. status - 查看 ftrace 状态
+   用法: sudo litetrace status
+   示例:
+     sudo litetrace status
+
+2. search - 搜索内核函数
+   用法: sudo litetrace search <正则表达式>
+   示例:
+     sudo litetrace search "^vfs_"        # 搜索所有 VFS 函数
+     sudo litetrace search "tcp_send"     # 搜索 TCP 发送相关函数
+     sudo litetrace search ".*read.*"     # 搜索包含 read 的函数
+
+3. run - 执行追踪
+   用法: sudo litetrace run [选项]
+   选项:
+     --tracer <类型>      追踪器类型: function, function_graph, nop (默认: function)
+     --filter <函数名>    要追踪的函数名，支持通配符 (默认: 无，追踪所有)
+     --duration <时长>    追踪持续时间，如 5s, 1m, 2h (默认: 10s)
+     --output <文件路径>  输出文件路径 (必需)
+   示例:
+     sudo litetrace run --tracer function --filter vfs_read --duration 5s --output /tmp/trace.txt
+     sudo litetrace run --tracer function_graph --filter "tcp_*" --duration 30s --output /tmp/tcp_trace.txt
+     sudo litetrace run --output /tmp/all_functions.txt  # 追踪所有函数
+
+4. wizard - 交互式向导
+   用法: sudo litetrace wizard
+   说明: 启动交互式向导，引导完成追踪配置
+   示例:
+     sudo litetrace wizard
+
+5. tui - 实时 TUI 监控
+   用法: sudo litetrace tui
+   说明: 启动终端图形界面，实时查看追踪数据
+   快捷键:
+     q/Ctrl+C  退出并清理
+     p         暂停/恢复追踪
+     s         保存当前追踪到文件
+     c         清空追踪缓冲区
+     ↑/↓       滚动查看
+   示例:
+     sudo litetrace tui
+
+6. background - 后台追踪
+   用法: sudo litetrace background [选项]
+   选项:
+     --tracer <类型>      追踪器类型: function, function_graph, nop (默认: function)
+     --filter <函数名>    要追踪的函数名，支持通配符
+     --duration <时长>    追踪持续时间，如 5s, 1m, 2h (默认: 无限期)
+     --output <文件路径>  输出文件路径 (默认: /tmp/litetrace_background_<时间戳>.txt)
+   说明: 在后台运行追踪任务，立即返回不阻塞终端
+   示例:
+     sudo litetrace background --tracer function --filter vfs_read --duration 30s --output /tmp/trace.txt
+     sudo litetrace background --tracer function --filter vfs_read  # 无限期运行
+
+7. terminate - 停止后台追踪
+   用法: sudo litetrace terminate
+   说明: 停止后台追踪进程，导出结果并清理状态
+   示例:
+     sudo litetrace terminate
+
+8. tldr - 快速帮助
+   用法: sudo litetrace tldr
+   说明: 显示简明的使用帮助
+   示例:
+     sudo litetrace tldr
+
+【调试模式】
+  使用 --debug 选项可查看详细的 tracefs 文件操作:
+    sudo litetrace --debug run --tracer function --filter vfs_read --duration 5s --output /tmp/trace.txt
+
+追踪器类型说明
+--------------
+
+1. function (默认)
+   - 追踪函数入口
+   - 轻量级，性能开销小
+   - 适合长时间追踪
+
+2. function_graph
+   - 追踪函数调用和返回
+   - 显示完整的调用链
+   - 性能开销较大，但信息更详细
+
+3. nop
+   - 禁用追踪
+   - 用于安全模式或重置状态
+
+过滤器语法
+----------
+
+1. 精确匹配
+   vfs_read              # 只追踪 vfs_read 函数
+
+2. 通配符匹配
+   vfs_*                 # 追踪所有以 vfs_ 开头的函数
+   *read*                # 追踪包含 read 的函数
+
+3. 多个函数
+   vfs_read,vfs_write    # 同时追踪 vfs_read 和 vfs_write
+
+4. 所有函数
+   (不指定 --filter)     # 追踪所有内核函数（高开销）
+
+tracefs 文件说明
+----------------
+
+/sys/kernel/tracing/available_tracers              # 可用追踪器列表
+/sys/kernel/tracing/available_filter_functions     # 可过滤的函数列表
+/sys/kernel/tracing/current_tracer                 # 当前追踪器
+/sys/kernel/tracing/tracing_on                     # 追踪开关 (0=关闭, 1=开启)
+/sys/kernel/tracing/set_ftrace_filter              # 函数过滤器
+/sys/kernel/tracing/trace                          # 追踪输出（快照）
+/sys/kernel/tracing/trace_pipe                     # 追踪输出（流式）
+/sys/kernel/tracing/buffer_size_kb                 # 缓冲区大小
+/sys/kernel/tracing/trace_clock                    # 时钟源
+
+注意事项
+--------
+
+1. 权限要求
+   - 所有命令都需要 root 权限
+   - 使用 sudo 执行
+
+2. 性能影响
+   - 追踪所有函数会产生大量数据，可能导致系统负载升高
+   - 建议始终使用过滤器限制追踪范围
+   - function_graph 比 function 开销更大
+
+3. 缓冲区限制
+   - 默认每个 CPU 有固定大小的环形缓冲区
+   - 长时间追踪可能导致旧数据被覆盖
+   - 可通过 /sys/kernel/tracing/buffer_size_kb 调整
+
+4. 安全关闭
+   - 程序会在退出时自动清理（禁用追踪、重置追踪器、清空过滤器）
+   - 异常退出时可使用 SafeShutdown 恢复安全状态
+
+5. 调试模式
+   - 使用 --debug 可查看所有 tracefs 文件操作
+   - 黄色输出表示调试信息
+   - 有助于排查问题
+
+故障排除
+--------
+
+问题: Permission denied
+解决: 使用 sudo 运行命令
+
+问题: tracefs not found
+解决: 手动挂载 tracefs:
+      mount -t tracefs nodev /sys/kernel/tracing
+      或
+      mount -t debugfs nodev /sys/kernel/debug
+
+问题: Invalid filter / Function not found
+解决: 使用 search 命令查找有效的函数名:
+      sudo litetrace search "^vfs_"
+
+问题: Trace buffer is empty
+原因:
+  - 追踪器设置为 nop
+  - 过滤器没有匹配到任何函数
+  - 追踪时间太短
+  - 没有匹配的内核活动
+解决: 检查追踪器类型、过滤器设置，增加追踪时间
+
+问题: device or resource busy
+原因: 其他进程正在使用 trace_pipe
+解决: 查找并终止占用 tracefs 的进程:
+      lsof /sys/kernel/tracing/trace_pipe
+      kill -9 <PID>
+
+问题: 无法设置追踪器
+原因: 当前过滤器设置为 "all functions enabled"
+解决: 程序会自动处理此问题，如仍失败请手动设置:
+      echo vfs_read > /sys/kernel/tracing/set_ftrace_filter
+
+示例场景
+--------
+
+场景1: 追踪文件读取操作
+  sudo litetrace run --tracer function --filter vfs_read --duration 10s --output /tmp/vfs_read.txt
+
+场景2: 追踪 TCP 网络操作
+  sudo litetrace run --tracer function_graph --filter "tcp_*" --duration 30s --output /tmp/tcp.txt
+
+场景3: 实时监控所有系统调用
+  sudo litetrace tui
+  # 然后在界面中查看实时数据
+
+场景4: 查找并追踪特定函数
+  sudo litetrace search "sched_"
+  sudo litetrace run --filter sched_switch --duration 5s --output /tmp/sched.txt
+
+相关资源
+--------
+
+- Linux ftrace 文档: Documentation/trace/ftrace.rst (内核源码)
+- trace-cmd 工具: https://trace-cmd.org/
+- KernelShark: https://kernelshark.org/
+
+================================================================================
+                          版本信息
+================================================================================
+
+Litetrace - 轻量级 ftrace 工具
+纯 Go 实现，零外部依赖
+
+================================================================================

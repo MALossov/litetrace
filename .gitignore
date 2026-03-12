@@ -32,7 +32,7 @@ go.work
 Thumbs.db
 
 # Trace output files
-*.txt
+# *.txt
 *.log
 # *.cast
 
