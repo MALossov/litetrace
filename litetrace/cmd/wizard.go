@@ -146,51 +146,38 @@ var wizardCmd = &cobra.Command{
 			wizard.PrintSuccess(fmt.Sprintf("Trace saved to %s", outputPath))
 
 		case 3:
-			// Background mode
-			fmt.Println("[*] Tracing is running in background.")
+			// Background mode - 真正的后台运行
+			fmt.Println("[*] Starting background tracing process...")
 
-			if duration != "" {
-				d, _ := time.ParseDuration(duration)
-				fmt.Printf("[*] Will run for %v...\n", d)
-				fmt.Println("[*] Press Ctrl+C to stop early")
+			// 先停止当前引擎（后台进程会自己启动）
+			engine.SafeShutdown()
 
-				// Setup signal handling
-				sigChan := make(chan os.Signal, 1)
-				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+			// 启动真正的后台进程
+			timestamp := time.Now().Format("20060102_150405")
+			outputPath := fmt.Sprintf("/tmp/litetrace_wizard_%s.txt", timestamp)
 
-				// Wait for either duration or signal
-				select {
-				case <-sigChan:
-					fmt.Println("\n[*] Stopping early...")
-				case <-time.After(d):
-					fmt.Println("\n[*] Duration completed.")
-				}
-
-				// Export results
-				timestamp := time.Now().Format("20060102_150405")
-				outputPath := fmt.Sprintf("/tmp/litetrace_wizard_%s.txt", timestamp)
-
-				fmt.Printf("[*] Exporting trace to %s...\n", outputPath)
-				if err := engine.StopAndExport(outputPath); err != nil {
-					fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
-					os.Exit(1)
-				}
-				wizard.PrintSuccess(fmt.Sprintf("Trace saved to %s", outputPath))
-			} else {
-				fmt.Println("[*] To stop tracing and view results:")
-				fmt.Println("    1. Run 'litetrace status' to check status")
-				fmt.Println("    2. Run 'litetrace run --output /path/to/file' to export results")
-				fmt.Println("\n[!] Press Ctrl+C to stop and cleanup immediately")
-
-				// Wait for interrupt with cleanup
-				sigChan := make(chan os.Signal, 1)
-				signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-				<-sigChan
-
-				fmt.Println("\n[*] Cleaning up...")
-				engine.SafeShutdown()
-				wizard.PrintSuccess("Tracing stopped and cleaned up")
+			if err := ftrace.StartBackgroundProcess(string(tracer), filter, duration, outputPath); err != nil {
+				fmt.Fprintf(os.Stderr, "🚨 Fatal: %v\n", err)
+				os.Exit(1)
 			}
+
+			// 获取后台进程PID
+			_, pid, _ := ftrace.IsDaemonRunning()
+
+			wizard.PrintSuccess(fmt.Sprintf("Background tracing started with PID %d", pid))
+			fmt.Println()
+			fmt.Println("[*] Tracing is now running in background.")
+			if duration != "" {
+				fmt.Printf("[*] Will run for %s\n", duration)
+			}
+			fmt.Println()
+			fmt.Println("To manage the background process:")
+			fmt.Println("    litetrace status     - Check tracing status")
+			fmt.Println("    litetrace terminate  - Stop background tracing")
+			fmt.Println()
+			fmt.Printf("[*] Results will be saved to: %s\n", outputPath)
+			fmt.Println()
+			fmt.Println("[+] You can now continue using your shell.")
 		}
 	},
 }

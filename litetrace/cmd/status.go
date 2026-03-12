@@ -45,5 +45,24 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("- Buffer Size   : %d KB (Per CPU)\n", status.BufferSize)
 		fmt.Printf("- Trace Clock   : %s\n", status.TraceClock)
 		fmt.Println("=========================================")
+
+		// 检查后台进程状态
+		running, pid, err := ftrace.IsDaemonRunning()
+		if err != nil {
+			fmt.Printf("\n[!] Failed to check daemon status: %v\n", err)
+		} else if running {
+			fmt.Println("\n[ Background Process Status ]")
+			fmt.Println("=========================================")
+			fmt.Printf("- Daemon Status : 🟢 RUNNING\n")
+			fmt.Printf("- Process ID    : %d\n", pid)
+			fmt.Println("=========================================")
+			fmt.Println("\nTo stop the background process:")
+			fmt.Println("    litetrace terminate")
+		} else {
+			fmt.Println("\n[ Background Process Status ]")
+			fmt.Println("=========================================")
+			fmt.Println("- Daemon Status : 🔴 NOT RUNNING")
+			fmt.Println("=========================================")
+		}
 	},
 }

@@ -50,10 +50,8 @@ echo ""
 ```bash
 echo "【阶段2】启动30秒后台追踪任务"
 echo "----------------------------------------"
-echo "执行: sudo ./litetrace run --tracer function --filter vfs_read --duration 30s --output /tmp/trace_30s.txt &"
-sudo ./litetrace run --tracer function --filter vfs_read --duration 30s --output /tmp/trace_30s.txt &
-TRACING_PID=$!
-echo "后台追踪PID: $TRACING_PID"
+echo "执行: sudo ./litetrace background --tracer function --filter vfs_read --duration 30s --output /tmp/trace_30s.txt"
+sudo ./litetrace background --tracer function --filter vfs_read --duration 30s --output /tmp/trace_30s.txt
 echo ""
 sleep 2
 ```
@@ -73,6 +71,8 @@ echo ""
 - Engine Status: 🟢 RUNNING (tracing\_on = 1)
 - Current Tracer: function
 - Active Filters: vfs\_read
+- Background Process Status: 🟢 RUNNING
+- Process ID: <PID>
 
 ### 2.3 等待追踪完成
 
@@ -81,6 +81,8 @@ echo "等待追踪完成（约25秒）..."
 sleep 25
 echo ""
 ```
+
+**说明：** 使用 `background` 命令启动的后台追踪会在指定时间后自动停止并保存结果，无需手动等待。
 
 ***
 

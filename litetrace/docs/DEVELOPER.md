@@ -123,9 +123,12 @@ litetrace/
 主要文件:
 - `root.go`: 定义根命令，注册全局标志（--debug）和所有子命令
 - `run.go`: 实现一次性追踪执行，支持 --tracer, --filter, --duration, --output
+- `background.go`: 启动后台追踪进程，立即返回不阻塞终端
+- `background_daemon.go`: 后台守护进程，实际执行追踪任务（内部使用）
 - `wizard.go`: 实现交互式向导，引导用户完成配置
 - `search.go`: 实现函数搜索，支持正则表达式
-- `status.go`: 显示当前 ftrace 状态
+- `status.go`: 显示当前 ftrace 状态和后台进程状态
+- `terminate.go`: 停止后台追踪进程
 - `tui.go`: 启动 TUI 实时监控界面
 - `tldr.go`: 显示快速帮助
 
@@ -145,6 +148,12 @@ litetrace/
   - `ReadTracePipe()`: 读取 trace_pipe 实时数据流
 
 - `FindTracefs()`: 自动发现 tracefs 挂载点
+
+- 后台进程管理 (`daemon.go`):
+  - `StartBackgroundProcess()`: 使用 setsid 启动独立后台进程
+  - `IsDaemonRunning()`: 检查后台进程状态
+  - `StopDaemon()`: 停止后台进程
+  - PID 文件管理: `/var/run/litetrace/litetrace.pid`
 
 关键流程:
 ```

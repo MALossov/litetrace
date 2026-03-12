@@ -86,7 +86,25 @@ ftrace 内核追踪工具，无需依赖外部二进制文件，可直接与 tra
    示例:
      sudo litetrace tui
 
-6. tldr - 快速帮助
+6. background - 后台追踪
+   用法: sudo litetrace background [选项]
+   选项:
+     --tracer <类型>      追踪器类型: function, function_graph, nop (默认: function)
+     --filter <函数名>    要追踪的函数名，支持通配符
+     --duration <时长>    追踪持续时间，如 5s, 1m, 2h (默认: 无限期)
+     --output <文件路径>  输出文件路径 (默认: /tmp/litetrace_background_<时间戳>.txt)
+   说明: 在后台运行追踪任务，立即返回不阻塞终端
+   示例:
+     sudo litetrace background --tracer function --filter vfs_read --duration 30s --output /tmp/trace.txt
+     sudo litetrace background --tracer function --filter vfs_read  # 无限期运行
+
+7. terminate - 停止后台追踪
+   用法: sudo litetrace terminate
+   说明: 停止后台追踪进程，导出结果并清理状态
+   示例:
+     sudo litetrace terminate
+
+8. tldr - 快速帮助
    用法: sudo litetrace tldr
    说明: 显示简明的使用帮助
    示例:

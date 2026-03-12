@@ -9,6 +9,18 @@
 
 Litetrace 是一个零依赖、单二进制文件的 Linux 内核追踪工具，直接操作 tracefs 文件系统，无需依赖外部二进制文件（如 trace-cmd）。它提供了内核函数追踪、实时监控、交互式向导等功能，适合开发者和系统管理员进行内核性能分析和调试。
 
+演示参考：[Asciiinema](https://asciinema.org/a/qAkS4xPz46cNDY5P)
+
+或者运行演示脚本：demo_script.sh
+
+```bash
+./scripts/demo_script.sh
+```
+
+[![asciicast](https://asciinema.org/a/qAkS4xPz46cNDY5P.svg)](https://asciinema.org/a/qAkS4xPz46cNDY5P)
+
+<script src="https://asciinema.org/a/qAkS4xPz46cNDY5P.js" id="asciicast-qAkS4xPz46cNDY5P" async="true"></script>
+
 ## 特性
 
 - **纯 Go 实现**：单二进制文件，零外部依赖
@@ -54,6 +66,9 @@ sudo ./litetrace status
 # 追踪 vfs_read 函数 5 秒
 sudo ./litetrace run --tracer function --filter vfs_read --duration 5s --output /tmp/trace.txt
 
+# 后台追踪（不阻塞终端）
+sudo ./litetrace background --tracer function --filter vfs_read --duration 30s --output /tmp/trace.txt
+
 # 搜索内核函数
 sudo ./litetrace search "^vfs_"
 
@@ -62,6 +77,9 @@ sudo ./litetrace wizard
 
 # 启动 TUI 实时监控
 sudo ./litetrace tui
+
+# 停止后台追踪
+sudo ./litetrace terminate
 ```
 
 ## 命令参考
@@ -132,6 +150,32 @@ sudo ./litetrace tui
 - `s` - 保存当前追踪到文件
 - `c` - 清空追踪缓冲区
 - `↑/↓` - 滚动查看
+
+#### `background` - 后台追踪
+
+```bash
+sudo ./litetrace background [选项]
+
+# 选项
+--tracer <类型>      # 追踪器类型: function, function_graph, nop (默认: function)
+--filter <函数名>    # 要追踪的函数名，支持通配符
+--duration <时长>    # 追踪持续时间，如 5s, 1m, 2h (默认: 无限期)
+--output <文件路径>  # 输出文件路径 (默认: /tmp/litetrace_background_<时间戳>.txt)
+
+# 示例
+sudo ./litetrace background --tracer function --filter vfs_read --duration 30s --output /tmp/trace.txt
+sudo ./litetrace background --tracer function_graph --filter "tcp_*"  # 无限期运行，手动停止
+```
+
+在后台运行追踪任务，立即返回不阻塞终端。适合长时间追踪或需要在追踪期间继续使用shell的场景。
+
+#### `terminate` - 停止后台追踪
+
+```bash
+sudo ./litetrace terminate
+```
+
+停止正在运行的后台追踪进程，导出结果并清理ftrace状态。
 
 #### `tldr` - 快速帮助
 
