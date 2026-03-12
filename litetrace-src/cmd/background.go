@@ -5,7 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/M410550/lite-tracer-mygo/internal/ftrace"
+	"M410550-LOCAL-DEV/lite-tracer-mygo/internal/ftrace"
+
 	"github.com/spf13/cobra"
 )
 

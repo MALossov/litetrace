@@ -12,8 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/M410550/lite-tracer-mygo/cmd"
-	"github.com/M410550/lite-tracer-mygo/internal/ftrace"
+	"M410550-LOCAL-DEV/lite-tracer-mygo/cmd"
+	"M410550-LOCAL-DEV/lite-tracer-mygo/internal/ftrace"
 )
 
 // Global variables for graceful shutdown handling

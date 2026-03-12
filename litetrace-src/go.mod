@@ -1,4 +1,4 @@
-module github.com/M410550/lite-tracer-mygo
+module M410550-LOCAL-DEV/lite-tracer-mygo
 
 go 1.25.0
 

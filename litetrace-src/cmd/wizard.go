@@ -7,10 +7,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/M410550/lite-tracer-mygo/internal/ftrace"
-	"github.com/M410550/lite-tracer-mygo/internal/search"
-	"github.com/M410550/lite-tracer-mygo/internal/ui"
-	"github.com/M410550/lite-tracer-mygo/internal/wizard"
+	"M410550-LOCAL-DEV/lite-tracer-mygo/internal/ftrace"
+	"M410550-LOCAL-DEV/lite-tracer-mygo/internal/search"
+	"M410550-LOCAL-DEV/lite-tracer-mygo/internal/ui"
+	"M410550-LOCAL-DEV/lite-tracer-mygo/internal/wizard"
+
 	"github.com/spf13/cobra"
 )
 
