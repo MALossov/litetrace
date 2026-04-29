@@ -1,8 +1,10 @@
 # Litetrace
 
-一个使用纯Vibecoding实现的 Go 语言实现的轻量级 Linux ftrace 内核追踪工具。
+一个使用 Vibe Coding / AI Agent 驱动的纯 Go 语言实现的轻量级 Linux ftrace 内核追踪工具。本项目约 98% 的代码由 AI Agent 构建。
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
+> AI Agent 构建的具体贡献可见：[VIBE_CODING.md](./docs/VIBE_CODING.md)
+
+[![Go Version](https://img.shields.io/badge/Go-1.25+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## 简介
@@ -31,12 +33,24 @@ Litetrace 是一个零依赖、单二进制文件的 Linux 内核追踪工具，
 - **调试模式**：详细的 tracefs 文件操作日志
 - **优雅关闭**：完善的错误处理和信号处理机制
 
+## Vibe Coding / AI Agent 构建
+
+本项目基本全部由 AI Agent（Trae IDE）构建，是人类与 AI 深度协作的典型案例：
+
+- **Spec/Plan 先行**：首先由 AI Agent 输出完整 spec，确立项目大图、模块划分与数据流设计
+- **Agent 全量构建**：库选型（cobra / tview / promptui）、全部代码实现、单元测试、文档均由 AI Agent 独立完成
+- **人机协同调试**：人类负责 AI 权限不可及的 Linux Kernel TraceFS 实际环境调试，同时提出界面交互建议（TUI 快捷键、Wizard 流程、background/terminate 拆分等）
+- **Agent 闭环修改**：人类反馈后由 AI Agent 完成修改，人类辅助验证
+- **演示脚本**：303 行 `demo_script.sh` 由 AI Agent 独立撰写，人机结合完成 asciinema 录制
+
+详见 [docs/VIBE_CODING.md](docs/VIBE_CODING.md)。
+
 ## 安装
 
 ### 前置要求
 
 - Linux 系统（内核版本 2.6.27+）
-- Go 1.21 或更高版本
+- Go 1.25 或更高版本
 - root 权限
 
 ### 从源码编译
@@ -265,9 +279,13 @@ litetrace/
 │   ├── search/           # 函数搜索
 │   ├── ui/               # TUI 界面
 │   └── wizard/           # 交互式向导
+├── scripts/              # 脚本
+│   └── demo_script.sh   # 功能演示脚本 (AI Agent 撰写)
 └── docs/                 # 文档
     ├── cheatsheet.txt    # 用户手册
-    └── DEVELOPER.md      # 开发者文档
+    ├── DEVELOPER.md      # 开发者文档
+    ├── VIBE_CODING.md    # Vibe Coding 构建实践
+    └── litetrace_demo.gif # 演示录屏
 ```
 
 ## 开发
@@ -283,7 +301,9 @@ make build
 make clean
 ```
 
-更多信息请参考 [DEVELOPER.md](litetrace/docs/DEVELOPER.md)。
+更多信息请参考 [DEVELOPER.md](docs/DEVELOPER.md)。
+
+Vibe Coding 构建详情请参考 [VIBE_CODING.md](docs/VIBE_CODING.md)。
 
 ## 故障排除
 
