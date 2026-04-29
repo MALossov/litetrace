@@ -1,6 +1,6 @@
 # Litetrace
 
-一个使用纯 Go 语言实现的轻量级 Linux ftrace 内核追踪工具。
+一个使用纯Vibecoding实现的 Go 语言实现的轻量级 Linux ftrace 内核追踪工具。
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
