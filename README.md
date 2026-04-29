@@ -11,7 +11,7 @@
 
 Litetrace 是一个零依赖、单二进制文件的 Linux 内核追踪工具，直接操作 tracefs 文件系统，无需依赖外部二进制文件（如 trace-cmd）。它提供了内核函数追踪、实时监控、交互式向导等功能，适合开发者和系统管理员进行内核性能分析和调试。
 
-演示参考：[Asciiinema演示链接](https://asciinema.org/a/qAkS4xPz46cNDY5P)
+演示参考：[Asciiinema演示链接](https://asciinema.org/a/985510)
 
 或者运行演示脚本：demo_script.sh
 
